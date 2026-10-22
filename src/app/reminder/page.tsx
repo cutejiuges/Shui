@@ -5,7 +5,7 @@ import {
   register,
   unregisterAll,
 } from "@tauri-apps/plugin-global-shortcut";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { listen, TauriEvent } from "@tauri-apps/api/event";
 import { Progress } from "@/components/ui/progress";
 import { ArrowRight } from "lucide-react";
@@ -19,9 +19,15 @@ import "./index.css";
 import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
 import { STORE_NAME } from "@/lib/constants";
 import { usePlatform } from "@/hooks/use-platform";
+import {
+  appendDrinkEntry,
+  DrinkHistoryValue,
+  getLocalDateKey,
+  normalizeDrinkDay,
+} from "@/lib/drink-history";
 
-function hideWindowAction() {
-  invoke("hide_reminder_windows");
+function hideWindowAction(outcome: "confirmed" | "skipped" = "skipped") {
+  invoke("hide_reminder_windows", { outcome });
   invoke("reset_timer");
   unregisterAll();
 }
@@ -59,14 +65,6 @@ const sendNativeNotification = async () => {
   }
 };
 
-function getTodayDate() {
-  const today = new Date();
-  return `${today.getFullYear()}${String(today.getMonth() + 1).padStart(
-    2,
-    "0"
-  )}${String(today.getDate()).padStart(2, "0")}`;
-}
-
 const waterOptions = [{ ml: 50 }, { ml: 100 }, { ml: 200 }, { ml: 300 }];
 
 const reminderTexts = [
@@ -97,8 +95,10 @@ export default function ReminderPage() {
   const [countdown, setCountdown] = useState(30);
   const [monitorName, setMonitorName] = useState("");
   const { isLinux } = usePlatform();
+  const saving = useRef(false);
+  const [saveError, setSaveError] = useState("");
   // 按天存储饮水量
-  const todayDate = getTodayDate();
+  const todayDate = getLocalDateKey();
 
   // 根据饮水量随机选择提醒文案
   useEffect(() => {
@@ -115,11 +115,8 @@ export default function ReminderPage() {
   useEffect(() => {
     registerEscShortcut();
 
-    listen("countdown", (event) => {
+    const countdownListener = listen("countdown", (event) => {
       setCountdown(event.payload as number);
-      if (event.payload === 0) {
-        setTimeout(hideWindowAction, 500);
-      }
     });
 
     // TODO:被其他窗口隐藏时，注销快捷键
@@ -139,6 +136,7 @@ export default function ReminderPage() {
     });
 
     return () => {
+      countdownListener.then((unlisten) => unlisten());
       unregisterAll();
     };
   }, []);
@@ -187,12 +185,14 @@ export default function ReminderPage() {
         config_store.get<{
           gold: number;
         }>("alert"),
-        drinkHistory.get<number>(todayDate),
+        drinkHistory.get<DrinkHistoryValue>(todayDate),
       ]);
 
+      const goal = Number(goldSetting?.gold) || 0;
+
       setWater({
-        gold: Number(goldSetting?.gold),
-        drink,
+        gold: goal,
+        drink: normalizeDrinkDay(drink, goal).total,
       });
     };
 
@@ -202,31 +202,44 @@ export default function ReminderPage() {
   const [isClosing, setIsClosing] = useState(false);
 
   const handleWaterSelection = async (ml: number) => {
-    const totalDrink = water.drink + ml;
-    setWater({
-      ...water,
-      drink: totalDrink,
-    });
-    const store = await load(STORE_NAME.drink_history, { autoSave: false });
-    await store.set(todayDate, totalDrink);
-    await store.save();
+    if (saving.current) return;
+    saving.current = true;
+    setSaveError("");
+    try {
+      const recordDate = getLocalDateKey();
+      const store = await load(STORE_NAME.drink_history, { autoSave: false });
+      const storedValue = await store.get<DrinkHistoryValue>(recordDate);
+      const previous = normalizeDrinkDay(storedValue, water.gold);
+      const updated = appendDrinkEntry(storedValue, ml, water.gold);
+      await store.set(recordDate, updated);
+      try {
+        await store.save();
+      } catch (error) {
+        // Restore the in-memory value so a retry does not add the same drink twice.
+        if (storedValue === undefined) await store.delete(recordDate);
+        else await store.set(recordDate, storedValue);
+        throw error;
+      }
+      setWater({ ...water, drink: updated.total });
 
-    if (totalDrink >= water.gold) {
-      sendNativeNotification();
-    }
+      if (water.gold > 0 && previous.total < water.gold && updated.total >= water.gold) {
+        sendNativeNotification();
+      }
 
-    // 添加关闭动画
-    setIsClosing(true);
-    setTimeout(
-      () => {
-        hideWindowAction();
+      setIsClosing(true);
+      setTimeout(() => {
+        hideWindowAction("confirmed");
         setIsClosing(false);
-      },
-      isLinux ? 100 : 300
-    ); // Linux 系统下无透明度，设置延时为 0，其他系统为 300ms
+        saving.current = false;
+      }, isLinux ? 100 : 300);
+    } catch (error) {
+      console.error("保存饮水记录失败:", error);
+      setSaveError("保存失败，请重试");
+      saving.current = false;
+    }
   };
 
-  const progress = (water.drink / water.gold) * 100;
+  const progress = water.gold > 0 ? (water.drink / water.gold) * 100 : 0;
 
   return (
     <div
@@ -275,8 +288,9 @@ export default function ReminderPage() {
         </div>
 
         <div className="mt-6 text-center">
+          {saveError && <p role="alert" className="mb-2 text-red-600">{saveError}</p>}
           <button
-            onClick={hideWindowAction}
+            onClick={() => hideWindowAction()}
             tabIndex={-1}
             className="text-gray-500 hover:text-gray-700 text-sm inline-flex items-center gap-1.5 transition-colors duration-300 cursor-pointer"
           >

@@ -1,12 +1,15 @@
 use crate::core::window;
 use crate::core::{store::settings::AppSettings, util};
+use crate::reminder_history::{Outcome, Tracker};
 use crate::timer;
+use chrono::Local;
 use serde::Serialize;
 use std::sync::atomic::Ordering;
 
 // Remove this line since we don't need it
 // use tauri::api::version::Version;
 use tauri::{Emitter, Manager};
+use tauri_plugin_dialog::DialogExt;
 use timer::IS_RUNNING;
 use tokio::time::{sleep, Duration};
 
@@ -16,7 +19,12 @@ use tokio::sync::mpsc;
 // 只保留 channel 相关的静态变量
 static REMINDER_PAGE_COUNTDOWN_SENDER: Mutex<Option<mpsc::Sender<()>>> = Mutex::new(None);
 
+lazy_static::lazy_static! {
+    static ref REMINDER_TRACKER: Mutex<Tracker> = Mutex::new(Tracker::default());
+}
+
 fn countdown_async(app_handle: tauri::AppHandle) {
+    let token = REMINDER_TRACKER.lock().unwrap().token();
     // 取消之前的倒计时
     if let Some(sender) = REMINDER_PAGE_COUNTDOWN_SENDER.lock().unwrap().take() {
         let _ = sender.try_send(());
@@ -41,6 +49,9 @@ fn countdown_async(app_handle: tauri::AppHandle) {
                     countdown -= 1;
                     let _ = app_handle.emit("countdown", countdown);
                     if countdown <= 0 {
+                        if close_reminder(&app_handle, Outcome::TimedOut, token) {
+                            reset_timer();
+                        }
                         break;
                     }
                 }
@@ -53,6 +64,9 @@ fn countdown_async(app_handle: tauri::AppHandle) {
 #[tauri::command]
 pub fn call_reminder(app_handle: tauri::AppHandle) -> bool {
     println!("call_reminder");
+    if !REMINDER_TRACKER.lock().unwrap().begin() {
+        return true;
+    }
 
     pause_timer();
     window::show_reminder_windows(&app_handle);
@@ -68,6 +82,9 @@ pub fn call_reminder(app_handle: tauri::AppHandle) -> bool {
 #[tauri::command]
 pub async fn call_reminder(app_handle: tauri::AppHandle) -> bool {
     println!("call_reminder");
+    if !REMINDER_TRACKER.lock().unwrap().begin() {
+        return true;
+    }
 
     pause_timer();
     // 直接传递引用，避免不必要的 clone
@@ -79,13 +96,27 @@ pub async fn call_reminder(app_handle: tauri::AppHandle) -> bool {
 }
 
 #[tauri::command]
-pub fn hide_reminder_windows(app_handle: tauri::AppHandle) {
-    window::hide_reminder_windows(&app_handle);
+pub fn hide_reminder_windows(app_handle: tauri::AppHandle, outcome: Option<Outcome>) {
+    close_reminder(&app_handle, outcome.unwrap_or(Outcome::Skipped), None);
+}
+
+fn close_reminder(
+    app_handle: &tauri::AppHandle,
+    outcome: Outcome,
+    expected: Option<std::time::Instant>,
+) -> bool {
+    let mut tracker = REMINDER_TRACKER.lock().unwrap();
+    if expected.is_some() && tracker.token() != expected {
+        return false;
+    }
+    tracker.finish(app_handle, outcome);
+    window::hide_reminder_windows(app_handle);
 
     // 取消之前的倒计时
     if let Some(sender) = REMINDER_PAGE_COUNTDOWN_SENDER.lock().unwrap().take() {
         let _ = sender.try_send(());
     }
+    true
 }
 
 #[tauri::command]
@@ -184,4 +215,28 @@ pub async fn get_app_runtime_info(
 #[tauri::command]
 pub async fn get_installed_apps() -> Vec<String> {
     util::get_installed_apps().await
+}
+
+#[tauri::command]
+pub async fn save_drink_history_csv(
+    app_handle: tauri::AppHandle,
+    content: String,
+) -> Result<Option<String>, String> {
+    let file_name = format!("shui-drink-history-{}.csv", Local::now().format("%Y%m%d"));
+    let selected_path = app_handle
+        .dialog()
+        .file()
+        .set_title("导出饮水记录")
+        .set_file_name(file_name)
+        .add_filter("CSV", &["csv"])
+        .blocking_save_file();
+
+    let Some(file_path) = selected_path else {
+        return Ok(None);
+    };
+    let path = file_path.into_path().map_err(|error| error.to_string())?;
+
+    std::fs::write(&path, content).map_err(|error| format!("写入导出文件失败: {error}"))?;
+
+    Ok(Some(path.to_string_lossy().into_owned()))
 }

@@ -1,6 +1,7 @@
 mod commands;
 mod core;
 use core::setup;
+mod reminder_history;
 mod timer;
 use tauri::Manager;
 use tauri_plugin_autostart::MacosLauncher;
@@ -15,6 +16,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_store::Builder::new().build())
@@ -47,6 +49,7 @@ pub fn run() {
             commands::start_timer,
             commands::get_app_runtime_info,
             commands::get_installed_apps,
+            commands::save_drink_history_csv,
             commands::quit
         ])
         .run(tauri::generate_context!())

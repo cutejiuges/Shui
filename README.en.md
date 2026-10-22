@@ -95,13 +95,23 @@ sudo xattr -r -d com.apple.quarantine /Applications/Shui.app
 - [ ] Multi-language Support
 - [ ] Linux Support
 - [x] Reminder Sound Effects
-- [ ] Data Statistics and Analysis
-  - [ ] Water Intake Trend Charts
-  - [ ] Break Time Statistics
-  - [ ] Data Export Functionality
-  - [ ] Water Intake Time Distribution
-  - [ ] Water Intake Interval Analysis
-- [ ] Custom Themes
+- [x] Data Statistics and Analysis
+  - [x] Water Intake Trend Charts
+  - [x] Break Reminder Statistics (display duration, not actual rest time)
+  - [x] Data Export Functionality
+  - [x] Water Intake Time Distribution
+  - [x] Water Intake Interval Analysis
+- [x] Custom Themes
+
+### Drinking time analysis
+
+The Statistics page shows four local-time buckets (00–06, 06–12, 12–18 and 18–24) and the mean, median, shortest and longest intervals for the selected 7 or 30 days. Only adjacent events on the same local date are compared. Equal timestamps do not create intervals; positive intervals under one minute are retained.
+
+Only valid timestamped entries contribute to this analysis. Legacy daily totals remain available in the trend chart. Times are interpreted in the device's current time zone, and unrecorded drinks cannot be included.
+
+After installing dependencies, run `node --test tests/drink-patterns.test.cjs` to verify the calculations.
+
+Break reminder statistics summarize completed full-screen reminders, including manual tray reminders, over the selected 7/30 days. Outcomes include confirmed drinks, skips/Esc and timeouts. Multiple monitors share one session, assigned to its starting date, with display time capped at 30 seconds. Native notifications and sessions interrupted by an app crash are excluded. Use Refresh to load new records. Statistics are stored separately in `reminder_history_store.json`; CSV export still contains drinking records only.
 
 ## 🛠 Tech Stack
 

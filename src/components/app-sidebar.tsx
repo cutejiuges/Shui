@@ -1,5 +1,11 @@
 "use client";
-import { AlarmClock, Keyboard, Settings, Info } from "lucide-react";
+import {
+  AlarmClock,
+  ChartNoAxesCombined,
+  Keyboard,
+  Settings,
+  Info,
+} from "lucide-react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -25,6 +31,11 @@ const items = [
     title: "提醒",
     url: "/setting/reminder/",
     icon: AlarmClock,
+  },
+  {
+    title: "统计",
+    url: "/setting/statistics/",
+    icon: ChartNoAxesCombined,
   },
   {
     title: "快捷键",
