@@ -23,6 +23,33 @@ lazy_static::lazy_static! {
     static ref REMINDER_TRACKER: Mutex<Tracker> = Mutex::new(Tracker::default());
 }
 
+#[tauri::command]
+pub fn get_reminder_session() -> Option<String> {
+    REMINDER_TRACKER.lock().unwrap().session_id()
+}
+
+#[tauri::command]
+pub fn record_drink(
+    app_handle: tauri::AppHandle,
+    amount: u64,
+    request_id: String,
+    reminder_session: Option<String>,
+) -> Result<crate::drink_recording::Receipt, String> {
+    if let Some(session) = reminder_session {
+        // Hold the session lock until save finishes, so timeout cannot interleave.
+        let tracker = REMINDER_TRACKER.lock().map_err(|_| "提醒状态不可用")?;
+        if tracker.session_id().as_deref() != Some(&session) {
+            return Err("本次提醒已结束，请在统计页记录饮水".into());
+        }
+        crate::drink_recording::record_drink(&app_handle, amount, &format!("reminder:{session}"))
+    } else {
+        if request_id.is_empty() || request_id.len() > 128 || !request_id.is_ascii() {
+            return Err("无效的请求标识".into());
+        }
+        crate::drink_recording::record_drink(&app_handle, amount, &format!("manual:{request_id}"))
+    }
+}
+
 fn countdown_async(app_handle: tauri::AppHandle) {
     let token = REMINDER_TRACKER.lock().unwrap().token();
     // 取消之前的倒计时

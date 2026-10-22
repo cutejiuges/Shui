@@ -1,5 +1,6 @@
 mod commands;
 mod core;
+mod drink_recording;
 use core::setup;
 mod reminder_history;
 mod timer;
@@ -41,6 +42,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::call_reminder,
+            commands::record_drink,
+            commands::get_reminder_session,
             commands::setting,
             commands::hide_reminder_windows,
             commands::hide_reminder_window,

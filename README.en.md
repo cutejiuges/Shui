@@ -105,6 +105,10 @@ sudo xattr -r -d com.apple.quarantine /Applications/Shui.app
 
 ### Drinking time analysis
 
+The Statistics page supports manual 50/100/200/300ml entries, including when native notifications are enabled. Successful saves refresh the view; failed requests can be retried with the same ID. Both entry points use a serialized Rust writer with backend date, time and goal values, preserving legacy daily totals.
+
+Persisted request IDs prevent repeated additions on retry. All monitors in one reminder session share an ID, so the first successful amount wins. Manual entries are independent drinks and do not increase reminder counts. Existing charts, time analysis and CSV export support the updated records.
+
 The Statistics page shows four local-time buckets (00–06, 06–12, 12–18 and 18–24) and the mean, median, shortest and longest intervals for the selected 7 or 30 days. Only adjacent events on the same local date are compared. Equal timestamps do not create intervals; positive intervals under one minute are retained.
 
 Only valid timestamped entries contribute to this analysis. Legacy daily totals remain available in the trend chart. Times are interpreted in the device's current time zone, and unrecorded drinks cannot be included.

@@ -20,11 +20,11 @@ import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
 import { STORE_NAME } from "@/lib/constants";
 import { usePlatform } from "@/hooks/use-platform";
 import {
-  appendDrinkEntry,
   DrinkHistoryValue,
   getLocalDateKey,
   normalizeDrinkDay,
 } from "@/lib/drink-history";
+import { recordDrink } from "@/utils/record-drink";
 
 function hideWindowAction(outcome: "confirmed" | "skipped" = "skipped") {
   invoke("hide_reminder_windows", { outcome });
@@ -96,6 +96,7 @@ export default function ReminderPage() {
   const [monitorName, setMonitorName] = useState("");
   const { isLinux } = usePlatform();
   const saving = useRef(false);
+  const session = useRef<string | null>(null);
   const [saveError, setSaveError] = useState("");
   // 按天存储饮水量
   const todayDate = getLocalDateKey();
@@ -114,9 +115,14 @@ export default function ReminderPage() {
 
   useEffect(() => {
     registerEscShortcut();
+    const refreshSession = () => {
+      invoke<string | null>("get_reminder_session").then(value => { session.current = value; }).catch(console.error);
+    };
+    refreshSession();
 
     const countdownListener = listen("countdown", (event) => {
       setCountdown(event.payload as number);
+      refreshSession();
     });
 
     // TODO:被其他窗口隐藏时，注销快捷键
@@ -206,24 +212,12 @@ export default function ReminderPage() {
     saving.current = true;
     setSaveError("");
     try {
-      const recordDate = getLocalDateKey();
-      const store = await load(STORE_NAME.drink_history, { autoSave: false });
-      const storedValue = await store.get<DrinkHistoryValue>(recordDate);
-      const previous = normalizeDrinkDay(storedValue, water.gold);
-      const updated = appendDrinkEntry(storedValue, ml, water.gold);
-      await store.set(recordDate, updated);
-      try {
-        await store.save();
-      } catch (error) {
-        // Restore the in-memory value so a retry does not add the same drink twice.
-        if (storedValue === undefined) await store.delete(recordDate);
-        else await store.set(recordDate, storedValue);
-        throw error;
-      }
-      setWater({ ...water, drink: updated.total });
+      if (!session.current) throw new Error("提醒尚未就绪");
+      const updated = await recordDrink(ml, session.current, session.current);
+      setWater({ gold: updated.goal, drink: updated.total });
 
-      if (water.gold > 0 && previous.total < water.gold && updated.total >= water.gold) {
-        sendNativeNotification();
+      if (updated.goalReached) {
+        sendNativeNotification().catch(console.error);
       }
 
       setIsClosing(true);

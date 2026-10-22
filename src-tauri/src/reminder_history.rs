@@ -37,6 +37,7 @@ impl DaySummary {
 }
 
 pub struct Session {
+    id: String,
     day: String,
     started: Instant,
 }
@@ -47,6 +48,9 @@ pub struct Tracker {
 }
 
 impl Tracker {
+    pub fn session_id(&self) -> Option<String> {
+        self.active.as_ref().map(|session| session.id.clone())
+    }
     pub fn token(&self) -> Option<Instant> {
         self.active.as_ref().map(|session| session.started)
     }
@@ -56,6 +60,11 @@ impl Tracker {
             return false;
         }
         self.active = Some(Session {
+            id: format!(
+                "{}-{}",
+                std::process::id(),
+                Local::now().timestamp_nanos_opt().unwrap_or_default()
+            ),
             day: Local::now().format("%Y%m%d").to_string(),
             started: Instant::now(),
         });
@@ -131,6 +140,7 @@ mod tests {
     fn closing_after_midnight_keeps_start_date() {
         let mut tracker = Tracker {
             active: Some(Session {
+                id: "test".into(),
                 day: "20261022".into(),
                 started: Instant::now(),
             }),
