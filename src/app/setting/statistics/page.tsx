@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { STORE_NAME } from "@/lib/constants";
 import { ManualDrink } from "@/components/manual-drink";
+import { DrinkDetails } from "@/components/drink-details";
 import { summarizeReminders } from "@/lib/reminder-history";
 import {
   DrinkDaySummary,
@@ -389,6 +390,7 @@ export default function StatisticsPage() {
       </div>
 
       <ManualDrink onRecorded={() => setRevision(value => value + 1)} />
+      {!loading && !error && <DrinkDetails entries={historyEntries} goal={goal} onChanged={() => setRevision(value => value + 1)} />}
       {error ? (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
           {error}

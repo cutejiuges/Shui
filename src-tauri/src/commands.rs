@@ -29,6 +29,15 @@ pub fn get_reminder_session() -> Option<String> {
 }
 
 #[tauri::command]
+pub fn undo_drink(
+    app_handle: tauri::AppHandle,
+    date: String,
+    request_id: String,
+) -> Result<crate::drink_recording::UndoReceipt, String> {
+    crate::drink_recording::undo_drink(&app_handle, &date, &request_id)
+}
+
+#[tauri::command]
 pub fn record_drink(
     app_handle: tauri::AppHandle,
     amount: u64,

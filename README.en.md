@@ -93,7 +93,7 @@ sudo xattr -r -d com.apple.quarantine /Applications/Shui.app
 
 - [x] Windows Support
 - [ ] Multi-language Support
-- [ ] Linux Support
+- [x] Linux Support
 - [x] Reminder Sound Effects
 - [x] Data Statistics and Analysis
   - [x] Water Intake Trend Charts
@@ -104,6 +104,10 @@ sudo xattr -r -d com.apple.quarantine /Applications/Shui.app
 - [x] Custom Themes
 
 ### Drinking time analysis
+
+Statistics includes expandable daily entries for the selected 7/30-day period. New entries with request IDs can be undone after confirmation; legacy totals and entries without IDs remain view-only. Undo preserves historical goals and deduplication IDs: repeated undo never subtracts twice, and retrying the original request cannot re-add a revoked entry. Failed saves can be retried. Charts, time analysis and CSV reflect the corrected data; reminder counts are unchanged.
+
+Branch pushes and pull requests trigger `.github/workflows/ci.yaml` for frontend tests, ESLint, production builds and Rust workspace tests on macOS. This workflow does not publish releases or replace real multi-monitor and cross-platform desktop validation.
 
 The Statistics page supports manual 50/100/200/300ml entries, including when native notifications are enabled. Successful saves refresh the view; failed requests can be retried with the same ID. Both entry points use a serialized Rust writer with backend date, time and goal values, preserving legacy daily totals.
 

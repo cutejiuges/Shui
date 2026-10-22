@@ -1,4 +1,5 @@
 export interface DrinkEntry {
+  requestId?: string;
   amount: number;
   timestamp: string;
 }
@@ -93,6 +94,7 @@ export function normalizeDrinkDay(
             Number(entry.amount) > 0
         )
         .map((entry) => ({
+          ...(typeof entry.requestId === "string" ? { requestId: entry.requestId } : {}),
           amount: Number(entry.amount),
           timestamp: entry.timestamp,
         }))

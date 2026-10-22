@@ -43,6 +43,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::call_reminder,
             commands::record_drink,
+            commands::undo_drink,
             commands::get_reminder_session,
             commands::setting,
             commands::hide_reminder_windows,

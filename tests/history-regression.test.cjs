@@ -12,6 +12,27 @@ function loadModule(path) {
 const water = loadModule('src/lib/drink-history.ts');
 const { summarizeReminders } = loadModule('src/lib/reminder-history.ts');
 
+test('detail normalization preserves stable IDs without inventing legacy entries', () => {
+  assert.deepEqual(water.normalizeDrinkDay(800, 1000).entries, []);
+  const day = water.normalizeDrinkDay({total: 900, entries: [
+    { amount: 100, timestamp: '2026-10-22T01:00:00Z', requestId: 'manual:one' },
+    { amount: 50, timestamp: '2026-10-22T02:00:00Z' },
+  ]}, 1000);
+  assert.equal(day.entries[0].requestId, 'manual:one');
+  assert.equal(day.entries[1].requestId, undefined);
+});
+
+test('revoked IDs do not appear in trends, time analysis or CSV', () => {
+  const date = new Date(2026, 9, 22, 12);
+  const key = water.getLocalDateKey(date);
+  const value = {schemaVersion: 1, total: 800, goal: 1000, entries: [], revokedRequestIds: ['manual:one']};
+  assert.equal(water.summarizeDrinkDays([date], [value], 1000)[0].total, 800);
+  assert.equal(water.analyzeDrinkPatterns([[key, value]], 1000).totalEntries, 0);
+  const csv = water.exportDrinkHistoryCsv([[key, value]], 1000);
+  assert.ok(csv.includes('"800","1000","否","",""'));
+  assert.ok(!csv.includes('manual:one'));
+});
+
 test('reminder totals handle missing days and malformed fields without NaN', () => {
   const result = summarizeReminders([undefined, null, 4, { completed: 2, confirmed: 1, skipped: 1, displaySeconds: 19 },
     { completed: 1, timedOut: 1, displaySeconds: 30 }, { completed: -1, skipped: '4', displaySeconds: Infinity }]);
