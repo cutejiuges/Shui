@@ -2,6 +2,7 @@
 import { AlarmClock, Keyboard, Settings, Info } from "lucide-react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
+import { ChartNoAxesCombined } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 import {
@@ -35,6 +36,11 @@ const items = [
     title: "关于",
     url: "/setting/about/",
     icon: Info,
+  },
+  {
+    title: "统计",
+    url: "/setting/statistics/",
+    icon: ChartNoAxesCombined,
   },
 ];
 
