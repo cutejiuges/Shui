@@ -99,6 +99,7 @@ sudo xattr -r -d com.apple.quarantine /Applications/Shui.app
 - [x] Windows 适配
 - [x] Linux 适配
 - [x] 提醒音效
+- [x] 饮水记录备份与导入（JSON，预览后补充缺失日期，详见 [说明](docs/data-backup.md)）
 - [ ] 多语言支持
 - [ ] 数据统计与分析
   - [ ] 饮水量趋势图表

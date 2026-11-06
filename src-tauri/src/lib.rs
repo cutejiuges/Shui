@@ -2,8 +2,11 @@ mod commands;
 mod core;
 use core::setup;
 mod timer;
+mod reminder_session;
+mod drink_store;
 use tauri::Manager;
 use tauri_plugin_autostart::MacosLauncher;
+mod data_backup;
 
 pub fn run() {
     let mut builder = tauri::Builder::default();
@@ -15,6 +18,7 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_store::Builder::new().build())
@@ -32,6 +36,7 @@ pub fn run() {
     builder
         .setup(|app| {
             let app_handle = app.app_handle();
+            data_backup::init(&app_handle)?;
 
             setup::default(&app_handle);
 
@@ -42,8 +47,13 @@ pub fn run() {
             commands::setting,
             commands::hide_reminder_windows,
             commands::hide_reminder_window,
+            crate::reminder_session::get_reminder_session,
+            crate::reminder_session::record_reminder_drink,
             commands::reset_timer,
             commands::pause_timer,
+            crate::data_backup::export_drink_backup,
+            crate::data_backup::preview_drink_import,
+            crate::data_backup::confirm_drink_import,
             commands::start_timer,
             commands::get_app_runtime_info,
             commands::get_installed_apps,

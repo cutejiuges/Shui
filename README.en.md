@@ -95,6 +95,7 @@ sudo xattr -r -d com.apple.quarantine /Applications/Shui.app
 - [ ] Multi-language Support
 - [ ] Linux Support
 - [x] Reminder Sound Effects
+- [x] Drink history backup and import (JSON; preview and add missing dates without overwriting existing days; see [details](docs/data-backup.md))
 - [ ] Data Statistics and Analysis
   - [ ] Water Intake Trend Charts
   - [ ] Break Time Statistics
