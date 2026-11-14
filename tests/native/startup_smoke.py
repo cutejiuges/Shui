@@ -1,4 +1,4 @@
-"""Run #27 against the real OS/window/WebView, using an isolated test build.
+"""Run #27 and #33 against the real OS/window/WebView with an isolated test build.
 
 Only Python's standard library is required. The Cargo native-smoke feature adds
 an observer; no native test controls are compiled into the default application.
@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import date_schedule_smoke
 
 ROOT = Path(__file__).resolve().parents[2]
 NAME = "Shui Native Smoke"
@@ -227,6 +228,10 @@ def main():
         application = start([str(binary)])
         application.wait(lambda s: s["main"]["visible"], "manual cold launch shows settings")
         check("manual cold launch displays settings", True)
+        today = date_schedule_smoke.run(application, check)
+        application.stop()
+        application = start([str(binary), "--silent"])
+        date_schedule_smoke.verify_restart(application, today, check)
         application.stop()
         report["passed"] = True
     except Exception as error:

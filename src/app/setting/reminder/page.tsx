@@ -10,10 +10,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useEffect, useState } from "react";
-import { load } from "@tauri-apps/plugin-store";
 import { useTray } from "@/hooks/use-tray";
 import { invoke } from "@tauri-apps/api/core";
-import { STORE_NAME } from "@/lib/constants";
 import {
   Command,
   CommandEmpty,
@@ -31,6 +29,8 @@ import { Check, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { usePlatform } from "@/hooks/use-platform";
+import { useReminderSettings } from "@/hooks/use-reminder-settings";
+import { DateOverrides } from "@/components/date-overrides";
 
 const goldList = ["1000", "1500", "2000", "2500", "3000", "3500", "4000"];
 const gapList = ["10", "20", "30", "45", "60"];
@@ -40,14 +40,7 @@ if (process.env.NODE_ENV === "development") {
 }
 
 export default function Home() {
-  const [config, setConfig] = useState({
-    gold: goldList[0],
-    gap: gapList[0],
-    weekdays: [] as number[],
-    timeStart: "09:00",
-    timeEnd: "18:00",
-    whitelist_apps: [] as string[],
-  });
+  const { config, status, ready, saving, loadError, loadConfig, savePatch } = useReminderSettings();
   const [installedApps, setInstalledApps] = useState<string[]>([]);
   const { isMacOS } = usePlatform();
 
@@ -60,45 +53,6 @@ export default function Home() {
 
   useTray();
 
-  useEffect(() => {
-    async function loadConfig() {
-      const store = await load(STORE_NAME.config, { autoSave: false });
-      const val = await store.get<{
-        gold: string;
-        gap: string;
-        weekdays: number[];
-        timeStart: string;
-        timeEnd: string;
-      }>("alert");
-      setConfig({
-        ...config,
-        ...val,
-      });
-    }
-
-    loadConfig();
-  }, []);
-
-  const saveConfig = async (
-    filed: string,
-    value: string | number[] | string[]
-  ) => {
-    setConfig({
-      ...config,
-      [filed]: value,
-    });
-
-    const store = await load(STORE_NAME.config, { autoSave: false });
-    await store.set("alert", {
-      ...config,
-      [filed]: value,
-    });
-    await store.save();
-
-    // 重置计时器
-    invoke("reset_timer");
-  };
-
   const selectedApp = config.whitelist_apps.filter((app) =>
     installedApps.includes(app)
   );
@@ -106,6 +60,12 @@ export default function Home() {
   return (
     <div>
       <h3 className="mb-4 text-lg font-medium">提醒</h3>
+      {loadError && <div role="alert" className="text-sm text-destructive mb-4">
+        {loadError} <Button variant="outline" size="sm" onClick={loadConfig}>重试</Button>
+      </div>}
+      {!ready && !loadError && <p className="text-sm text-muted-foreground mb-4">加载提醒设置…</p>}
+      <fieldset disabled={!ready || saving} data-reminder-settings-ready={String(ready && !saving)}
+        className="min-w-0 disabled:opacity-60" aria-busy={saving}>
 
       <div className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-xs mb-4">
         <div>
@@ -122,7 +82,7 @@ export default function Home() {
         <Select
           value={config.gold}
           onValueChange={(value) => {
-            saveConfig("gold", value);
+            savePatch({ gold: value });
           }}
           defaultValue={config.gold}
         >
@@ -154,7 +114,7 @@ export default function Home() {
         <Select
           value={config.gap}
           onValueChange={(value) => {
-            saveConfig("gap", value);
+            savePatch({ gap: value });
           }}
           defaultValue={config.gap}
         >
@@ -185,6 +145,9 @@ export default function Home() {
           {["日", "一", "二", "三", "四", "五", "六"].map((day, index) => (
             <button
               key={day}
+              type="button"
+              aria-label={`星期${day}`}
+              aria-pressed={config.weekdays.includes(index)}
               className={`h-8 w-8 rounded-full text-sm font-medium transition-colors cursor-pointer
                 ${
                   config.weekdays?.includes(index)
@@ -197,7 +160,7 @@ export default function Home() {
                   ? weekdays.filter((d) => d !== index)
                   : [...weekdays, index];
 
-                saveConfig("weekdays", newWeekdays);
+                savePatch({ weekdays: newWeekdays });
               }}
             >
               {day}
@@ -219,12 +182,12 @@ export default function Home() {
           <Select
             value={config.timeStart}
             onValueChange={(value) => {
+              let timeEnd = config.timeEnd;
               if (value >= config.timeEnd && config.timeEnd !== "00:00") {
                 const nextTimeIndex = timeList.indexOf(value) + 1;
-                const newEndTime = timeList[nextTimeIndex] || "00:00";
-                saveConfig("timeEnd", newEndTime);
+                timeEnd = timeList[nextTimeIndex] || "00:00";
               }
-              saveConfig("timeStart", value);
+              savePatch({ timeStart: value, timeEnd });
             }}
             defaultValue={config.timeStart}
           >
@@ -245,7 +208,7 @@ export default function Home() {
           <Select
             value={config.timeEnd}
             onValueChange={(value) => {
-              saveConfig("timeEnd", value);
+              savePatch({ timeEnd: value });
             }}
             defaultValue={config.timeEnd}
           >
@@ -267,6 +230,9 @@ export default function Home() {
           </Select>
         </div>
       </div>
+
+      {status && <DateOverrides rules={config.dateOverrides} status={status}
+        onSave={(dateOverrides) => savePatch({ dateOverrides })} />}
 
       {isMacOS && (
         <div className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-xs mb-4">
@@ -317,7 +283,7 @@ export default function Home() {
                         const newApps = selectedApp.includes(app)
                           ? selectedApp.filter((a) => a !== app)
                           : [...selectedApp, app];
-                        saveConfig("whitelist_apps", newApps);
+                        savePatch({ whitelist_apps: newApps });
                       }}
                     >
                       <Check
@@ -338,6 +304,7 @@ export default function Home() {
         </div>
       )}
 
+      </fieldset>
       {/* <div className="flex justify-end">
         <Button
           onClick={() => {

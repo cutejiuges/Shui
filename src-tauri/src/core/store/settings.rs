@@ -1,3 +1,4 @@
+use crate::reminder_schedule::{day_schedule, read_date_overrides, DaySchedule};
 use chrono::{Datelike, Local, NaiveTime};
 use serde::Serialize;
 use tauri_plugin_store::{Store, StoreExt}; // 添加这行到文件顶部
@@ -40,14 +41,10 @@ pub struct AppSettings {
     pub whitelist_apps: Vec<String>,
     pub today_drink_amount: u64,
     pub is_work_day: bool,
+    pub schedule: DaySchedule,
     pub is_in_time_range: bool,
     pub is_show_countdown: bool,
     pub meta: AppSettingsMeta,
-}
-
-pub fn get_today_string() -> String {
-    let now = Local::now();
-    now.format("%Y%m%d").to_string()
 }
 
 fn drink_amount_from_value(value: &serde_json::Value) -> u64 {
@@ -74,6 +71,7 @@ impl AppSettings {
                 "gap": "20",
                 "gold": "1000",
                 "weekdays": [1, 2, 3, 4, 5],
+                "dateOverrides": [],
                 "timeStart": "09:00",
                 "timeEnd": "18:00",
                 "whitelist_apps": ["腾讯会议", "Zoom", "Google Meet", "Microsoft Teams"]
@@ -138,7 +136,9 @@ impl AppSettings {
             .and_then(|s| NaiveTime::parse_from_str(s, "%H:%M").ok())
             .unwrap_or(NaiveTime::from_hms_opt(18, 0, 0).unwrap());
 
-        let current_time = Local::now().time();
+        // Capture local time once so the calendar, clock and drink total agree at midnight.
+        let now = Local::now();
+        let current_time = now.time();
         let is_in_time_range = if time_end == NaiveTime::from_hms_opt(0, 0, 0).unwrap() {
             // 如果结束时间是 00:00，表示次日 0 点
             current_time >= time_start || current_time <= time_end
@@ -153,11 +153,13 @@ impl AppSettings {
             .map(|arr| arr.iter().filter_map(|v| v.as_u64()).collect::<Vec<u64>>())
             .unwrap_or_else(|| vec![]); // 默认为空数组
                                         // 获取今天是星期几（0-6，0 表示星期天）
-        let today_weekday = Local::now().weekday().num_days_from_sunday() as u64;
-        let is_work_day = weekdays.contains(&today_weekday);
+        let today_weekday = now.weekday().num_days_from_sunday() as u64;
+        let overrides = read_date_overrides(alert_config.get("dateOverrides"));
+        let schedule = day_schedule(now.date_naive(), &weekdays, &overrides);
+        let is_work_day = schedule.remind;
 
         let drink_amount = drink_history_store
-            .get(&get_today_string())
+            .get(&now.format("%Y%m%d").to_string())
             .map(|value| drink_amount_from_value(&value))
             .unwrap_or(0);
 
@@ -185,6 +187,7 @@ impl AppSettings {
             whitelist_apps: whitelist_apps,
             today_drink_amount: drink_amount,
             is_work_day: is_work_day,
+            schedule,
             is_in_time_range: is_in_time_range,
             is_show_countdown: is_show_countdown,
             meta: AppSettingsMeta {
@@ -205,15 +208,21 @@ impl AppSettings {
     pub fn get_status_message(&self) -> (&str, &str) {
         if self.today_drink_amount >= self.gold {
             ("已达标", "太棒啦，再接再厉")
+        } else if !self.is_work_day {
+            ("", self.schedule.reason_text())
+        } else if !self.is_in_time_range {
+            ("", "当前不在提醒时段")
         } else {
-            ("", "非工作日或非工作时间")
+            ("", self.schedule.reason_text())
         }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::drink_amount_from_value;
+    use super::*;
+    use crate::reminder_schedule::{day_schedule, DateOverride};
+    use chrono::NaiveDate;
     use serde_json::json;
 
     #[test]
@@ -237,5 +246,64 @@ mod tests {
     #[test]
     fn treats_invalid_drink_amount_as_zero() {
         assert_eq!(drink_amount_from_value(&json!({ "total": "unknown" })), 0);
+    }
+
+    fn extra_workday_settings() -> AppSettings {
+        let today = NaiveDate::from_ymd_opt(2026, 11, 14).unwrap();
+        let schedule = day_schedule(
+            today,
+            &[],
+            &[DateOverride {
+                date: "2026-11-14".into(),
+                remind: true,
+            }],
+        );
+        AppSettings {
+            gold: 1000,
+            gap: 1200,
+            whitelist_apps: vec![],
+            today_drink_amount: 0,
+            is_work_day: schedule.remind,
+            schedule,
+            is_in_time_range: true,
+            is_show_countdown: true,
+            meta: AppSettingsMeta {
+                weekdays: vec![],
+                current_time: NaiveTime::from_hms_opt(10, 0, 0).unwrap(),
+                time_start: NaiveTime::from_hms_opt(9, 0, 0).unwrap(),
+                time_end: NaiveTime::from_hms_opt(18, 0, 0).unwrap(),
+                today_weekday: 6,
+                gap_minutes: 20,
+            },
+        }
+    }
+
+    #[test]
+    fn extra_workdays_still_obey_time_and_goal_gates() {
+        let mut settings = extra_workday_settings();
+        assert!(settings.should_run_timer());
+        settings.is_in_time_range = false;
+        assert!(!settings.should_run_timer());
+        assert_eq!(settings.get_status_message().1, "当前不在提醒时段");
+        settings.is_in_time_range = true;
+        settings.today_drink_amount = settings.gold;
+        assert!(!settings.should_run_timer());
+        assert_eq!(settings.get_status_message().0, "已达标");
+    }
+
+    #[test]
+    fn days_off_stop_the_timer_and_explain_the_reason() {
+        let mut settings = extra_workday_settings();
+        settings.schedule = day_schedule(
+            NaiveDate::from_ymd_opt(2026, 11, 16).unwrap(),
+            &[1],
+            &[DateOverride {
+                date: "2026-11-16".into(),
+                remind: false,
+            }],
+        );
+        settings.is_work_day = settings.schedule.remind;
+        assert!(!settings.should_run_timer());
+        assert_eq!(settings.get_status_message().1, "休假日，今天不提醒");
     }
 }

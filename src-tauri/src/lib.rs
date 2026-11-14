@@ -3,6 +3,7 @@ mod drink_recording;
 mod core;
 use core::setup;
 mod reminder_history;
+mod reminder_schedule;
 mod statistics_export;
 mod timer;
 mod reminder_session;
@@ -92,6 +93,9 @@ pub fn run() {
             commands::start_timer,
             commands::get_app_runtime_info,
             commands::get_installed_apps,
+            crate::reminder_schedule::get_reminder_settings,
+            crate::reminder_schedule::get_reminder_schedule_status,
+            crate::reminder_schedule::update_reminder_settings,
             crate::statistics_export::save_drink_history_csv,
             commands::quit
         ])

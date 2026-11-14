@@ -66,10 +66,10 @@ jobs:
       - run: cargo test --workspace --locked
       - name: Build the default application
         run: cargo build --workspace --locked --features tauri/custom-protocol
-      - name: Native startup smoke (macOS / Windows)
+      - name: Native startup and date reminder smoke (macOS / Windows)
         if: runner.os != 'Linux'
         run: python tests/native/startup_smoke.py --build --artifacts artifacts/native-smoke
-      - name: Native startup smoke (Linux X11)
+      - name: Native startup and date reminder smoke (Linux X11)
         if: runner.os == 'Linux'
         env:
           GDK_BACKEND: x11
